@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": ["ES2019"],
+    "module": "ES2020",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "typeRoots": ["./node_modules/@figma"],
+    "types": ["plugin-typings"],
+    "noEmit": true
+  },
+  "files": ["src/sample.d.ts", "src/code.ts"]
+}

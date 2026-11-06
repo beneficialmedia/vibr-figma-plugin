@@ -1,0 +1,14 @@
+{
+  "name": "vibr-figma-plugin",
+  "private": true,
+  "description": "Send to Vibr: a Figma plugin that saves your variables, styles, components, frames and prototype links as one file for Vibr.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "devDependencies": {
+    "@figma/plugin-typings": "1.142.0",
+    "typescript": "5.9.3"
+  }
+}

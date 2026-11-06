@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<style>
+  /* Figma's own theme colors (themeColors: true), so it matches light and dark. */
+  :root { color-scheme: light dark; }
+  body { margin: 0; padding: 16px; font: 12px/1.5 Inter, system-ui, sans-serif; color: var(--figma-color-text); background: var(--figma-color-bg); }
+  h1 { font-size: 13px; font-weight: 600; margin: 0 0 4px; }
+  p { margin: 0 0 12px; color: var(--figma-color-text-secondary); }
+  a { color: var(--figma-color-text-brand); }
+  .scope { display: flex; gap: 14px; margin: 0 0 8px; }
+  .scope label { margin: 0; }
+  .frames { margin: 0 0 12px; padding: 8px 10px; border-radius: 6px; background: var(--figma-color-bg-secondary); max-height: 96px; overflow: auto; }
+  .frames li { list-style: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .frames ul { margin: 0; padding: 0; }
+  label { display: flex; gap: 8px; align-items: center; margin: 0 0 6px; }
+  .actions { display: flex; gap: 8px; margin-top: 14px; }
+  button { font: inherit; font-weight: 600; padding: 7px 12px; border-radius: 6px; border: 1px solid var(--figma-color-border); background: var(--figma-color-bg); color: var(--figma-color-text); cursor: pointer; }
+  button.primary { background: var(--figma-color-bg-brand); border-color: transparent; color: var(--figma-color-text-onbrand); }
+  button:disabled { opacity: 0.5; cursor: default; }
+  .status { margin-top: 12px; min-height: 18px; color: var(--figma-color-text-secondary); }
+  .status.error { color: var(--figma-color-text-danger); }
+</style>
+</head>
+<body>
+<h1>Send to Vibr</h1>
+<p>Saves your design as one file. Import it into your Vibr prototype library at vibr.art: select + and then Import from Figma. Nothing leaves Figma until you do. <a href="#" id="docs">How it works</a></p>
+<div class="scope" role="radiogroup" aria-label="Frames from">
+  <label><input type="radio" name="scope" value="page" checked /> This page or selection</label>
+  <label><input type="radio" name="scope" value="file" /> Whole file</label>
+</div>
+<div class="frames" id="frames"></div>
+<label><input type="checkbox" id="frames-on" checked /> Screens and elements, with layout and prototype links</label>
+<label><input type="checkbox" id="follow" checked /> Include frames they link to</label>
+<label><input type="checkbox" id="tokens" checked /> Variables, text styles and shadows</label>
+<label><input type="checkbox" id="components" checked /> Components</label>
+<div class="actions">
+  <button class="primary" id="save">Save file for Vibr</button>
+  <button id="copy" disabled>Copy</button>
+</div>
+<div class="status" id="status" role="status"></div>
+<script>
+  const $ = (id) => document.getElementById(id);
+  let last = null;
+  const status = (text, error) => { $("status").textContent = text; $("status").className = error ? "status error" : "status"; };
+
+  onmessage = (event) => {
+    const m = event.data.pluginMessage;
+    if (!m) return;
+    if (m.type === "selection") {
+      const list = $("frames");
+      list.textContent = "";
+      if (!m.items.length) {
+        list.textContent = "Nothing to send as screens. Tokens, styles and components still export.";
+      } else {
+        const note = document.createElement("p");
+        note.textContent =
+          m.source === "selection" ? "Selected:" :
+          m.source === "flows" ? "This page's prototype flows, starting at:" :
+          m.source === "file" ? (m.total > m.items.length ? `The file's first ${m.items.length} screens, page by page:` : "Screens from every page:") :
+          m.total > m.items.length ? `Nothing selected, so this page's first ${m.items.length} of ${m.total} screens:` : "Nothing selected, so this page's screens:";
+        note.style.margin = "0 0 4px";
+        list.append(note);
+        const ul = document.createElement("ul");
+        for (const item of m.items) {
+          const li = document.createElement("li");
+          li.textContent = item.kind === "element" ? `${item.name} (element)` : item.name;
+          ul.append(li);
+        }
+        list.append(ul);
+      }
+    } else if (m.type === "progress") {
+      status(m.text);
+    } else if (m.type === "error") {
+      status(m.text, true);
+      $("save").disabled = false;
+    } else if (m.type === "done") {
+      last = m;
+      $("save").disabled = false;
+      $("copy").disabled = false;
+      download(m);
+      status(`Saved ${m.fileName}: ${m.summary}. In Vibr, select + and then Import from Figma.`);
+    }
+  };
+
+  function download(m) {
+    const url = URL.createObjectURL(new Blob([m.json], { type: "application/json" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = m.fileName;
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  }
+
+  $("save").onclick = () => {
+    $("save").disabled = true;
+    status("Starting…");
+    parent.postMessage({ pluginMessage: { type: "export", options: {
+      frames: $("frames-on").checked,
+      followLinks: $("follow").checked,
+      tokens: $("tokens").checked,
+      scope: document.querySelector('input[name="scope"]:checked').value,
+      components: $("components").checked,
+    } } }, "*");
+  };
+
+  // Plugin windows can't use the async clipboard API; a selected textarea can.
+  $("copy").onclick = () => {
+    if (!last) return;
+    const area = document.createElement("textarea");
+    area.value = last.json;
+    document.body.append(area);
+    area.select();
+    const ok = document.execCommand("copy");
+    area.remove();
+    status(ok ? "Copied. Paste it into Vibr's request box." : "Couldn't copy; use the saved file.", !ok);
+  };
+
+  for (const radio of document.querySelectorAll('input[name="scope"]')) {
+    radio.onchange = () => parent.postMessage({ pluginMessage: { type: "scope", scope: radio.value } }, "*");
+  }
+
+  $("docs").onclick = (e) => {
+    e.preventDefault();
+    parent.postMessage({ pluginMessage: { type: "docs" } }, "*");
+  };
+
+  parent.postMessage({ pluginMessage: { type: "ready" } }, "*");
+</script>
+</body>
+</html>
